@@ -15,6 +15,7 @@ namespace AsmDefGenerator
             if (!File.Exists(args[0]))
             {
                 Console.WriteLine($"File \"{args[0]}\" does not exist");
+                return;
             }
 
             // Read original assembly
