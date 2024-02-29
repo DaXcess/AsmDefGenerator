@@ -4,6 +4,20 @@ namespace AsmDefGenerator
 {
     public class Application
     {
+        private static string[] ScanDir(string dir)
+        {
+            var files = Directory.GetFiles(dir, "*.dll").ToList();
+
+            foreach (var subDir in Directory.GetDirectories(dir))
+            {
+                Console.WriteLine(subDir);
+
+                files.AddRange(ScanDir(subDir));
+            }
+
+            return files.ToArray();
+        }
+
         public static void Main(string[] args)
         {
             if (args.Length < 1)
@@ -12,37 +26,73 @@ namespace AsmDefGenerator
                 return;
             }
 
-            if (!File.Exists(args[0]))
+            var files = new List<string>();
+
+            if (Directory.Exists(args[0]))
+            {
+                files.AddRange(ScanDir(args[0]));
+            }
+
+            if (File.Exists(args[0]))
+            {
+                files.Add(args[0]);
+            }
+
+            if (files.Count < 1)
             {
                 Console.WriteLine($"File \"{args[0]}\" does not exist");
                 return;
             }
 
-            // Read original assembly
-            var context = ModuleDef.CreateModuleContext();
-            var module = ModuleDefMD.Load(args[0], context);
-
-            foreach (var type in module.Types)
+            foreach (var file in files)
             {
-                type.Visibility |= TypeAttributes.Public;
+                Console.WriteLine($"Processing {file}");
 
-                foreach (var method in type.Methods)
+                // Read original assembly
+                var context = ModuleDef.CreateModuleContext();
+                var module = ModuleDefMD.Load(file, context);
+
+                module.Resources.Clear();
+
+                foreach (var type in module.Types)
                 {
-                    method.Access |= MethodAttributes.Public;
-                    method.Access &= ~MethodAttributes.Private;
+                    type.Visibility |= TypeAttributes.Public;
 
-                    method.Body?.ExceptionHandlers?.Clear();
-                    method.Body?.Instructions?.Clear();
+                    foreach (var method in type.Methods)
+                    {
+                        method.Access |= MethodAttributes.Public;
+                        method.Access &= ~MethodAttributes.Private;
+
+                        method.Body?.ExceptionHandlers?.Clear();
+                        method.Body?.Instructions?.Clear();
+                    }
+
+                    foreach (var field in type.Fields)
+                    {
+                        field.Access &= ~FieldAttributes.Private;
+                        field.Access |= FieldAttributes.Public;
+                    }
+
+                    foreach (var @event in type.Events)
+                    {
+                        var backingField = type.Fields.FirstOrDefault(field => field.FullName == @event.FullName);
+
+                        if (backingField != null)
+                        {
+                            backingField.Access &= ~FieldAttributes.Public;
+                            backingField.Access |= FieldAttributes.Private;
+                        }
+                    }
                 }
 
-                foreach (var field in type.Fields)
-                {
-                    field.Access &= ~FieldAttributes.Private;
-                    field.Access |= FieldAttributes.Public;
-                }
+                var folder = Path.GetDirectoryName(file)!;
+                var tempFilename = Path.GetFileNameWithoutExtension(file) + ".def" + Path.GetExtension(file);
+
+                module.Write(Path.Combine(folder, tempFilename));
+                module.Dispose();
+
+                File.Move(Path.Combine(folder, tempFilename), file, true);
             }
-
-            module.Write(Path.GetFileNameWithoutExtension(args[0]) + ".def" + Path.GetExtension(args[0]));
         }
     }
 }
