@@ -9,8 +9,6 @@ for other purposes.
 
 ## Usage
 
-> This tool does not output new DLL files. It replaces the original input file!
-
 ```sh
 # Generate a reference assembly from a single file
 $ AsmDefGenerator ./assembly.dll
